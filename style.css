@@ -6,22 +6,30 @@ html, body {
   width: 100%;
   height: 100%;
   margin: 0;
+  padding: 0;
 }
 
 body {
-  background-image: url("bgimage.png");
+  /* This is the background for the actual game area */
+  background-image: url("images.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   font-family: Arial, sans-serif;
   overflow: hidden;
+  position: fixed; 
+  width: 100%;
 }
 
 /* HOME SCREEN */
 #homeScreen {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.65);
+  /* Updated to use your home.png */
+  background-image: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url("home3.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -31,33 +39,48 @@ body {
 .home-content {
   text-align: center;
   color: #fff;
+  /* Adds a slight shadow to text to make it readable over the image */
+  text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
 }
 
 .home-content h1 {
   font-size: clamp(32px, 8vw, 44px);
   margin-bottom: 30px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
 .emoji {
   display: block;
-  font-size: 48px;
+  font-size: 60px; /* Slightly larger for better UI */
+  margin-bottom: 10px;
 }
 
 #playBtn {
-  padding: 16px 48px;
-  font-size: 22px;
+  padding: 16px 60px;
+  font-size: 24px;
   font-weight: bold;
   border-radius: 999px;
-  border: none;
+  border: 2px solid rgba(255,255,255,0.3);
   background: linear-gradient(#ff4b4b, #c62828);
   color: #fff;
   cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+#playBtn:active {
+  transform: scale(0.95);
 }
 
 /* GAME CANVAS */
 canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: none;
-  margin: auto;
   background: transparent;
   touch-action: none;
 }
