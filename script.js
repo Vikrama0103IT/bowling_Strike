@@ -45,8 +45,6 @@ const PIN_RADIUS = 28;
 const BALL_RADIUS = 35;       
 const PIN_WIDTH = 104;        
 const PIN_HEIGHT = 150;       
-
-// Physics Threshold for Chain Reactions
 const PIN_HIT_THRESHOLD = 0.75; 
 
 /* ================= BALL ================= */
@@ -115,11 +113,9 @@ function createPins() {
   pins.length = 0;
   roundCompleted = false;
   const cx = canvas.width / 2;
-  
-  // ADJUSTED: Moved startY down and reduced gapY to compress the "game" area
   const startY = 150; 
   const gapX = 75; 
-  const gapY = 55; // Reduced from 80 to bring rows closer together
+  const gapY = 55;
 
   layout.forEach((count, row) => {
     const rowWidth = (count - 1) * gapX;
@@ -142,17 +138,28 @@ function drawPin(p) {
   ctx.restore();
 }
 
-/* ================= COLLISIONS ================= */
+/* ================= COLLISIONS & SCORE SYNC ================= */
+
+function applyImpulse(p, nx, ny, strength) {
+  if (!p.hit) { 
+    score++; 
+    p.hit = true; 
+    // MULTIPLAYER: Update battle score on every pin hit
+    window.parent.postMessage({ type: 'updateBattleScore', score: score }, '*');
+  }
+  p.vx += nx * strength;
+  p.vy += ny * strength * 0.7;
+  p.rot += nx * 0.8;
+  p.life = 90;
+}
 
 function checkBallPinCollision() {
   if (ball.x <= ball.r || ball.x >= canvas.width - ball.r) return;
-
   pins.forEach(p => {
     if (p.hit) return;
     const dx = p.x - ball.x;
     const dy = p.y - ball.y;
     const dist = Math.hypot(dx, dy);
-
     if (dist < (ball.r + PIN_RADIUS)) {
       applyImpulse(p, dx/dist, dy/dist, ball.speed() * 0.95);
       sndHit.currentTime = 0;
@@ -165,20 +172,16 @@ function checkPinPinCollision() {
   for (let i = 0; i < pins.length; i++) {
     const a = pins[i];
     if (!a.hit) continue; 
-
     for (let j = 0; j < pins.length; j++) {
       const b = pins[j];
       if (b.hit) continue; 
-
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);
-
       if (dist < PIN_RADIUS * 2) {
         const strikerSpeed = Math.hypot(a.vx, a.vy);
         const hitDirectness = 1 - (dist / (PIN_RADIUS * 2));
         const impactPower = strikerSpeed * hitDirectness;
-
         if (impactPower > PIN_HIT_THRESHOLD) {
           applyImpulse(b, dx/dist, dy/dist, strikerSpeed * 0.8);
         } else {
@@ -187,14 +190,6 @@ function checkPinPinCollision() {
       }
     }
   }
-}
-
-function applyImpulse(p, nx, ny, strength) {
-  if (!p.hit) { score++; p.hit = true; }
-  p.vx += nx * strength;
-  p.vy += ny * strength * 0.7;
-  p.rot += nx * 0.8;
-  p.life = 90;
 }
 
 /* ================= INPUT HANDLING ================= */
@@ -214,7 +209,7 @@ window.addEventListener("mouseup", handleEnd);
 window.addEventListener("touchend", handleEnd);
 
 function handleStart(e) {
-  if (ball.moving || ball.respawning) return;
+  if (!running || ball.moving || ball.respawning) return;
   const p = getPos(e);
   startX = ball.x;
   startY = ball.y;
@@ -258,6 +253,33 @@ function executeLockedThrow(dx, dy) {
   sndThrow.play().catch(() => {});
 }
 
+/* ================= MULTIPLAYER LOGIC ================= */
+
+// Triggered by "startGame" message from parent
+function startGame() {
+  homeScreen.style.display = "none";
+  canvas.style.display = "block";
+  running = true;
+  score = 0;
+  round = 1;
+  throwCount = 0;
+  createPins();
+  ball.reset();
+  gameLoop();
+}
+
+// Listen for commands from parent window
+window.addEventListener("message", function (event) {
+  if (event.data && event.data.type === "parent-event") {
+    var command = event.data.payload.command;
+    if (command === "startGame") {
+      startGame();
+    } else if (command === "endGame") {
+      running = false; // Stop the loop
+    }
+  }
+});
+
 /* ================= LOOP ================= */
 function gameLoop() {
   if (!running) return;
@@ -278,13 +300,15 @@ function gameLoop() {
   checkBallPinCollision();
   checkPinPinCollision();
 
+  // Endless Logic: Reset pins when cleared
   if (!roundCompleted && pins.every(p => p.hit)) {
     roundCompleted = true;
     sndStrike.currentTime = 0;
     sndStrike.play().catch(() => {});
     setTimeout(() => {
-      round++; throwCount = 0;
-      createPins(); ball.reset();
+      round++;
+      createPins(); 
+      ball.reset();
     }, 900);
   }
 
@@ -301,11 +325,7 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+// Play button sends "ready" signal instead of starting locally
 playBtn.onclick = () => {
-  homeScreen.style.display = "none";
-  canvas.style.display = "block";
-  running = true;
-  createPins();
-  ball.reset();
-  gameLoop();
+  window.parent.postMessage({ type: "readyGame" }, "*");
 };
