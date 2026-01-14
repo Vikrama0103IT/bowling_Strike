@@ -42,9 +42,13 @@ const sndStrike = new Audio("sounds/strike.mp3");
 const HUD_HEIGHT = 42;
 const PIN_FRICTION = 0.965;
 const PIN_RADIUS = 28;        
-const BALL_RADIUS = 30;       
+const BALL_RADIUS = 35;       
 const PIN_WIDTH = 104;        
-const PIN_HEIGHT = 120;       // INCREASED for extra length
+const PIN_HEIGHT = 150;       
+
+// Physics Thresholds
+const BALL_HIT_THRESHOLD = 0.45; 
+const PIN_HIT_THRESHOLD = 0.65;  // Pins are lighter, so they need a cleaner hit to fall
 
 /* ================= BALL ================= */
 const ball = {
@@ -112,9 +116,9 @@ function createPins() {
   pins.length = 0;
   roundCompleted = false;
   const cx = canvas.width / 2;
-  const startY = 100; // Slightly higher to account for taller pins
+  const startY = 110; 
   const gapX = 75; 
-  const gapY = 70; // INCREASED spacing for longer pins
+  const gapY = 80; 
 
   layout.forEach((count, row) => {
     const rowWidth = (count - 1) * gapX;
@@ -133,21 +137,32 @@ function drawPin(p) {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(p.rot);
-  // Centers the image on the collision point
   ctx.drawImage(pinImg, -PIN_WIDTH/2, -PIN_HEIGHT/2, PIN_WIDTH, PIN_HEIGHT);
   ctx.restore();
 }
 
 /* ================= COLLISIONS ================= */
+
 function checkBallPinCollision() {
+  if (ball.x <= ball.r || ball.x >= canvas.width - ball.r) return;
+
   pins.forEach(p => {
     if (p.hit) return;
     const dx = p.x - ball.x;
     const dy = p.y - ball.y;
     const dist = Math.hypot(dx, dy);
+
     if (dist < (ball.r + PIN_RADIUS)) {
-      applyImpulse(p, dx/dist, dy/dist, ball.speed() * 0.9);
-      sndHit.play().catch(() => {});
+      const hitDirectness = 1 - (dist / (ball.r + PIN_RADIUS));
+      const hitPower = ball.speed() * hitDirectness;
+
+      if (hitPower > BALL_HIT_THRESHOLD) {
+        applyImpulse(p, dx/dist, dy/dist, ball.speed() * 0.9);
+        sndHit.play().catch(() => {});
+      } else {
+        // Weak hit: Ball deflects but pin stays up
+        ball.vx *= -0.3;
+      }
     }
   });
 }
@@ -155,15 +170,30 @@ function checkBallPinCollision() {
 function checkPinPinCollision() {
   for (let i = 0; i < pins.length; i++) {
     const a = pins[i];
-    if (!a.hit) continue;
+    if (!a.hit) continue; // Only "falling" pins can hit others
+
     for (let j = 0; j < pins.length; j++) {
       const b = pins[j];
-      if (b.hit) continue;
+      if (b.hit) continue; // Don't hit pins already down
+
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);
+
       if (dist < PIN_RADIUS * 2) {
-        applyImpulse(b, dx/dist, dy/dist, Math.hypot(a.vx, a.vy) * 0.7);
+        const strikerSpeed = Math.hypot(a.vx, a.vy);
+        const hitDirectness = 1 - (dist / (PIN_RADIUS * 2));
+        
+        // PIN-TO-PIN LOGIC:
+        // Needs a cleaner hit (higher threshold) than the ball collision
+        const transferredPower = strikerSpeed * hitDirectness;
+
+        if (transferredPower > PIN_HIT_THRESHOLD) {
+          applyImpulse(b, dx/dist, dy/dist, strikerSpeed * 0.8);
+        } else {
+          // Glancing pin blow: The standing pin "resists" the hit
+          a.vx *= -0.2; // The falling pin bounces off the standing one
+        }
       }
     }
   }
@@ -177,7 +207,7 @@ function applyImpulse(p, nx, ny, strength) {
   p.life = 90;
 }
 
-/* ================= VECTOR-LOCKED INPUT HANDLING ================= */
+/* ================= INPUT HANDLING ================= */
 let isDragging = false;
 let startX = 0;
 let startY = 0;
@@ -290,4 +320,3 @@ playBtn.onclick = () => {
   ball.reset();
   gameLoop();
 };
-
