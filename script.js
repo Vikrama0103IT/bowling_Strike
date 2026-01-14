@@ -7,11 +7,11 @@ document.body.style.overflow = "hidden";
 document.body.style.touchAction = "none"; 
 ctx.imageSmoothingEnabled = false;
 
-/* ================= UI ================= */
+/* ================= UI ELEMENTS ================= */
 const playBtn = document.getElementById("playBtn");
 const homeScreen = document.getElementById("homeScreen");
 
-/* ================= CANVAS ================= */
+/* ================= CANVAS RESIZING ================= */
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -33,7 +33,6 @@ pinImg.src = "PNG1.png";
 const ballImg = new Image();
 ballImg.src = "image5.png";
 
-/* ================= SOUND ================= */
 const sndThrow = new Audio("sounds/throw.mp3");
 const sndHit = new Audio("sounds/hit.mp3");
 const sndStrike = new Audio("sounds/strike.mp3");
@@ -47,38 +46,28 @@ const PIN_WIDTH = 104;
 const PIN_HEIGHT = 150;       
 const PIN_HIT_THRESHOLD = 0.75; 
 
-/* ================= BALL ================= */
+/* ================= BALL OBJECT ================= */
 const ball = {
-  x: 0,
-  y: 0,
-  r: BALL_RADIUS,
-  vx: 0,
-  vy: 0,
-  rotation: 0,
-  moving: false,
-  respawning: false,
+  x: 0, y: 0, r: BALL_RADIUS,
+  vx: 0, vy: 0, rotation: 0,
+  moving: false, respawning: false,
 
   reset() {
     this.x = canvas.width / 2;
     this.y = canvas.height - 80;
-    this.vx = 0;
-    this.vy = 0;
+    this.vx = 0; this.vy = 0;
     this.rotation = 0;
     this.moving = false;
     this.respawning = false;
   },
 
-  speed() {
-    return Math.hypot(this.vx, this.vy);
-  },
+  speed() { return Math.hypot(this.vx, this.vy); },
 
   update() {
     if (!this.moving) return;
-
     this.x += this.vx;
     this.y -= Math.abs(this.vy); 
     this.rotation += this.speed() * 0.04;
-    
     this.vx *= 0.994;
     this.vy *= 0.994;
 
@@ -105,7 +94,7 @@ const ball = {
   }
 };
 
-/* ================= PINS ================= */
+/* ================= PINS LOGIC ================= */
 const layout = [4, 3, 2, 1];
 const pins = [];
 
@@ -139,12 +128,11 @@ function drawPin(p) {
 }
 
 /* ================= COLLISIONS & SCORE SYNC ================= */
-
 function applyImpulse(p, nx, ny, strength) {
   if (!p.hit) { 
     score++; 
     p.hit = true; 
-    // MULTIPLAYER: Update battle score on every pin hit
+    // MULTIPLAYER: Sync score to platform
     window.parent.postMessage({ type: 'updateBattleScore', score: score }, '*');
   }
   p.vx += nx * strength;
@@ -170,13 +158,10 @@ function checkBallPinCollision() {
 
 function checkPinPinCollision() {
   for (let i = 0; i < pins.length; i++) {
-    const a = pins[i];
-    if (!a.hit) continue; 
+    const a = pins[i]; if (!a.hit) continue; 
     for (let j = 0; j < pins.length; j++) {
-      const b = pins[j];
-      if (b.hit) continue; 
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
+      const b = pins[j]; if (b.hit) continue; 
+      const dx = b.x - a.x; const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);
       if (dist < PIN_RADIUS * 2) {
         const strikerSpeed = Math.hypot(a.vx, a.vy);
@@ -184,15 +169,13 @@ function checkPinPinCollision() {
         const impactPower = strikerSpeed * hitDirectness;
         if (impactPower > PIN_HIT_THRESHOLD) {
           applyImpulse(b, dx/dist, dy/dist, strikerSpeed * 0.8);
-        } else {
-          a.vx *= -0.3;
-        }
+        } else { a.vx *= -0.3; }
       }
     }
   }
 }
 
-/* ================= INPUT HANDLING ================= */
+/* ================= INPUTS ================= */
 let isDragging = false;
 let startX = 0, startY = 0, currentX = 0;
 
@@ -211,9 +194,7 @@ window.addEventListener("touchend", handleEnd);
 function handleStart(e) {
   if (!running || ball.moving || ball.respawning) return;
   const p = getPos(e);
-  startX = ball.x;
-  startY = ball.y;
-  currentX = p.x;
+  startX = ball.x; startY = ball.y; currentX = p.x;
   isDragging = true;
 }
 
@@ -235,81 +216,69 @@ function handleEnd(e) {
   const totalDy = p.clientY - startY;
   const distance = Math.hypot(totalDx, totalDy);
   if (distance > 40 && totalDy < -15) {
-    executeLockedThrow(totalDx, totalDy);
+    const speed = Math.min(distance * 0.16, 20);
+    ball.vx = (totalDx / distance) * speed * 0.65; 
+    ball.vy = Math.max(Math.abs((totalDy / distance) * speed), 10);
+    ball.moving = true;
+    throwCount++;
+    sndThrow.currentTime = 0;
+    sndThrow.play().catch(() => {});
   }
 }
 
-function executeLockedThrow(dx, dy) {
-  const distance = Math.hypot(dx, dy);
-  const dirX = dx / distance;
-  const dirY = dy / distance;
-  const speed = Math.min(distance * 0.16, 20);
-  ball.vx = dirX * speed * 0.65; 
-  ball.vy = Math.abs(dirY * speed);
-  if (ball.vy < 10) ball.vy = 10;
-  ball.moving = true;
-  throwCount++;
-  sndThrow.currentTime = 0;
-  sndThrow.play().catch(() => {});
-}
+/* ================= MULTIPLAYER CORE ================= */
 
-/* ================= MULTIPLAYER LOGIC ================= */
-
-// Triggered by "startGame" message from parent
 function startGame() {
   homeScreen.style.display = "none";
   canvas.style.display = "block";
   running = true;
-  score = 0;
-  round = 1;
-  throwCount = 0;
   createPins();
   ball.reset();
   gameLoop();
 }
 
-// Listen for commands from parent window
+// Requirement: Send readyGame when Play is clicked
+playBtn.onclick = () => {
+  window.parent.postMessage({ type: "readyGame" }, "*");
+};
+
+// Requirement: Message Listener for Start/End
 window.addEventListener("message", function (event) {
   if (event.data && event.data.type === "parent-event") {
     var command = event.data.payload.command;
     if (command === "startGame") {
       startGame();
     } else if (command === "endGame") {
-      running = false; // Stop the loop
+      running = false;
     }
   }
 });
 
-/* ================= LOOP ================= */
+/* ================= MAIN LOOP ================= */
 function gameLoop() {
   if (!running) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // HUD Background
   ctx.fillStyle = "rgba(0,0,0,0.4)";
   ctx.fillRect(0, 0, canvas.width, HUD_HEIGHT);
   ctx.fillStyle = "#fff";
   ctx.font = "bold 16px Arial";
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
   const cx = canvas.width / 2;
-  ctx.fillText(`Round ${round}`, cx - 150, HUD_HEIGHT / 2);
-  ctx.fillText(`Score ${score}`, cx, HUD_HEIGHT / 2);
-  ctx.fillText(`Throw ${throwCount}`, cx + 150, HUD_HEIGHT / 2);
+  ctx.fillText(`Round ${round}`, cx - 150, HUD_HEIGHT / 2 + 5);
+  ctx.fillText(`Score ${score}`, cx, HUD_HEIGHT / 2 + 5);
+  ctx.fillText(`Throw ${throwCount}`, cx + 150, HUD_HEIGHT / 2 + 5);
 
   ball.update();
   checkBallPinCollision();
   checkPinPinCollision();
 
-  // Endless Logic: Reset pins when cleared
+  // Endless Reset Logic
   if (!roundCompleted && pins.every(p => p.hit)) {
     roundCompleted = true;
-    sndStrike.currentTime = 0;
-    sndStrike.play().catch(() => {});
-    setTimeout(() => {
-      round++;
-      createPins(); 
-      ball.reset();
-    }, 900);
+    sndStrike.currentTime = 0; sndStrike.play().catch(() => {});
+    setTimeout(() => { round++; createPins(); ball.reset(); }, 900);
   }
 
   pins.forEach(p => {
@@ -324,8 +293,3 @@ function gameLoop() {
   ball.draw();
   requestAnimationFrame(gameLoop);
 }
-
-// Play button sends "ready" signal instead of starting locally
-playBtn.onclick = () => {
-  window.parent.postMessage({ type: "readyGame" }, "*");
-};
