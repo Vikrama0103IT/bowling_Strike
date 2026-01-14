@@ -38,11 +38,10 @@ const sndHit = new Audio("sounds/hit.mp3");
 const sndStrike = new Audio("sounds/strike.mp3");
 
 /* ================= CONSTANTS ================= */
-const HUD_HEIGHT = 42;
 const PIN_FRICTION = 0.965;
 const PIN_RADIUS = 28;        
 const BALL_RADIUS = 35;       
-const PIN_WIDTH = 104;        
+const PIN_WIDTH = 90;        
 const PIN_HEIGHT = 150;       
 const PIN_HIT_THRESHOLD = 0.75; 
 
@@ -71,15 +70,17 @@ const ball = {
     this.vx *= 0.994;
     this.vy *= 0.994;
 
+    // Side wall collisions
     if (this.x - this.r <= 0) { this.x = this.r; this.vx = 0; }
     if (this.x + this.r >= canvas.width) { this.x = canvas.width - this.r; this.vx = 0; }
 
-    if (this.y - this.r <= HUD_HEIGHT && !this.respawning) {
-      this.y = HUD_HEIGHT + this.r;
+    // RESET TRIGGER: Ball center reaches the very top edge (y=0)
+    if (this.y <= 0 && !this.respawning) {
+      this.y = 0;
       this.vx = 0; this.vy = 0;
       this.moving = false;
       this.respawning = true;
-      setTimeout(() => this.reset(), 600);
+      setTimeout(() => this.reset(), 400); 
     }
   },
 
@@ -102,7 +103,8 @@ function createPins() {
   pins.length = 0;
   roundCompleted = false;
   const cx = canvas.width / 2;
-  const startY = 150; 
+  // startY set high so pins sit near the top edge
+  const startY = 80; 
   const gapX = 75; 
   const gapY = 55;
 
@@ -132,7 +134,7 @@ function applyImpulse(p, nx, ny, strength) {
   if (!p.hit) { 
     score++; 
     p.hit = true; 
-    // MULTIPLAYER: Sync score to platform
+    // MULTIPLAYER: Update backend score
     window.parent.postMessage({ type: 'updateBattleScore', score: score }, '*');
   }
   p.vx += nx * strength;
@@ -175,7 +177,7 @@ function checkPinPinCollision() {
   }
 }
 
-/* ================= INPUTS ================= */
+/* ================= INPUT HANDLING ================= */
 let isDragging = false;
 let startX = 0, startY = 0, currentX = 0;
 
@@ -227,7 +229,6 @@ function handleEnd(e) {
 }
 
 /* ================= MULTIPLAYER CORE ================= */
-
 function startGame() {
   homeScreen.style.display = "none";
   canvas.style.display = "block";
@@ -237,12 +238,10 @@ function startGame() {
   gameLoop();
 }
 
-// Requirement: Send readyGame when Play is clicked
 playBtn.onclick = () => {
   window.parent.postMessage({ type: "readyGame" }, "*");
 };
 
-// Requirement: Message Listener for Start/End
 window.addEventListener("message", function (event) {
   if (event.data && event.data.type === "parent-event") {
     var command = event.data.payload.command;
@@ -258,17 +257,6 @@ window.addEventListener("message", function (event) {
 function gameLoop() {
   if (!running) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // HUD Background
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
-  ctx.fillRect(0, 0, canvas.width, HUD_HEIGHT);
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 16px Arial";
-  ctx.textAlign = "center";
-  const cx = canvas.width / 2;
-  ctx.fillText(`Round ${round}`, cx - 150, HUD_HEIGHT / 2 + 5);
-  ctx.fillText(`Score ${score}`, cx, HUD_HEIGHT / 2 + 5);
-  ctx.fillText(`Throw ${throwCount}`, cx + 150, HUD_HEIGHT / 2 + 5);
 
   ball.update();
   checkBallPinCollision();
