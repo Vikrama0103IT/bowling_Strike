@@ -116,9 +116,10 @@ function createPins() {
   roundCompleted = false;
   const cx = canvas.width / 2;
   
+  // ADJUSTED: Moved startY down and reduced gapY to compress the "game" area
   const startY = 150; 
   const gapX = 75; 
-  const gapY = 55; 
+  const gapY = 55; // Reduced from 80 to bring rows closer together
 
   layout.forEach((count, row) => {
     const rowWidth = (count - 1) * gapX;
@@ -126,16 +127,14 @@ function createPins() {
       pins.push({
         x: cx - rowWidth / 2 + i * gapX,
         y: startY + row * gapY,
-        vx: 0, vy: 0, rot: 0, hit: false
+        vx: 0, vy: 0, rot: 0, hit: false, life: 90
       });
     }
   });
 }
 
 function drawPin(p) {
-  // UPDATED: If the pin is hit, do not draw it at all
-  if (p.hit) return;
-  
+  if (p.hit && p.life <= 0) return;
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(p.rot);
@@ -165,8 +164,6 @@ function checkBallPinCollision() {
 function checkPinPinCollision() {
   for (let i = 0; i < pins.length; i++) {
     const a = pins[i];
-    // In this version, 'a' pins are effectively gone, but we keep 
-    // their velocity data for one frame to trigger chain reactions
     if (!a.hit) continue; 
 
     for (let j = 0; j < pins.length; j++) {
@@ -184,6 +181,8 @@ function checkPinPinCollision() {
 
         if (impactPower > PIN_HIT_THRESHOLD) {
           applyImpulse(b, dx/dist, dy/dist, strikerSpeed * 0.8);
+        } else {
+          a.vx *= -0.3;
         }
       }
     }
@@ -191,14 +190,11 @@ function checkPinPinCollision() {
 }
 
 function applyImpulse(p, nx, ny, strength) {
-  if (!p.hit) { 
-    score++; 
-    p.hit = true;
-  }
-  // We still assign velocity so it can trigger Pin-to-Pin collisions 
-  // in the same frame before disappearing
-  p.vx = nx * strength;
-  p.vy = ny * strength;
+  if (!p.hit) { score++; p.hit = true; }
+  p.vx += nx * strength;
+  p.vy += ny * strength * 0.7;
+  p.rot += nx * 0.8;
+  p.life = 90;
 }
 
 /* ================= INPUT HANDLING ================= */
@@ -292,8 +288,12 @@ function gameLoop() {
     }, 900);
   }
 
-  // UPDATED: Draw only the pins that haven't been hit
   pins.forEach(p => {
+    if (p.hit) {
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= PIN_FRICTION; p.vy *= PIN_FRICTION;
+      p.rot += p.vx * 0.015; p.life--;
+    }
     drawPin(p);
   });
 
