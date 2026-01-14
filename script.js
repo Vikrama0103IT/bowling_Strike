@@ -252,9 +252,9 @@ function gameLoop() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const cx = canvas.width / 2;
-  ctx.fillText(`Round ${round}`, cx - 150, HUD_HEIGHT / 2);
+  ctx.fillText(`Round ${round}`, cx - 120, HUD_HEIGHT / 2);
   ctx.fillText(`Score ${score}`, cx, HUD_HEIGHT / 2);
-  ctx.fillText(`Throw ${throwCount}`, cx + 150, HUD_HEIGHT / 2);
+  ctx.fillText(`Throw ${throwCount}`, cx + 120, HUD_HEIGHT / 2);
 
   ball.update();
   checkBallPinCollision();
@@ -290,3 +290,4 @@ playBtn.onclick = () => {
   ball.reset();
   gameLoop();
 };
+
