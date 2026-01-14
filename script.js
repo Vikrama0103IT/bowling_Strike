@@ -1,28 +1,20 @@
 /* ================= SETUP ================= */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+document.body.style.margin = "0";
+document.body.style.overflow = "hidden";
+document.body.style.touchAction = "none"; 
+ctx.imageSmoothingEnabled = false;
+
+/* ================= UI ================= */
 const playBtn = document.getElementById("playBtn");
 const homeScreen = document.getElementById("homeScreen");
 
-const BASE_WIDTH = 380;
-const BASE_HEIGHT = 680;
-
-/* ================= RESPONSIVE CANVAS ================= */
-let scale = 1;
-
+/* ================= CANVAS ================= */
 function resizeCanvas() {
-  const sw = window.innerWidth;
-  const sh = window.innerHeight;
-
-  scale = Math.min(sw / BASE_WIDTH, sh / BASE_HEIGHT);
-
-  canvas.width = BASE_WIDTH * scale;
-  canvas.height = BASE_HEIGHT * scale;
-
-  canvas.style.width = sw + "px";
-  canvas.style.height = sh + "px";
-
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
@@ -32,96 +24,83 @@ let score = 0;
 let round = 1;
 let throwCount = 0;
 let running = false;
+let roundCompleted = false;
 
-/* ================= IMAGES ================= */
+/* ================= ASSETS ================= */
 const pinImg = new Image();
-pinImg.src = "PNG.png";
+pinImg.src = "PNG1.png";
 
 const ballImg = new Image();
-ballImg.src = "ball1.png";
+ballImg.src = "image5.png";
 
 /* ================= SOUND ================= */
-const soundEnabled = true;
-
 const sndThrow = new Audio("sounds/throw.mp3");
 const sndHit = new Audio("sounds/hit.mp3");
 const sndStrike = new Audio("sounds/strike.mp3");
 
-sndThrow.volume = 0.6;
-sndHit.volume = 0.7;
-sndStrike.volume = 0.9;
-
-/* mobile audio unlock */
-document.addEventListener("touchstart", () => {
-  sndThrow.play().catch(()=>{});
-  sndThrow.pause();
-}, { once: true });
-
-/* ================= VIBRATION ================= */
-function vibrate(pattern) {
-  if (navigator.vibrate) navigator.vibrate(pattern);
-}
+/* ================= CONSTANTS ================= */
+const HUD_HEIGHT = 42;
+const PIN_FRICTION = 0.965;
+const PIN_RADIUS = 28;        
+const BALL_RADIUS = 30;       
+const PIN_WIDTH = 104;        
+const PIN_HEIGHT = 120;       // INCREASED for extra length
 
 /* ================= BALL ================= */
-const BALL_FLOOR_OFFSET = 70;
-
 const ball = {
-  x: BASE_WIDTH / 2,
-  y: BASE_HEIGHT - BALL_FLOOR_OFFSET,
-  r: 50,
+  x: 0,
+  y: 0,
+  r: BALL_RADIUS,
   vx: 0,
   vy: 0,
   rotation: 0,
   moving: false,
+  respawning: false,
 
-  draw() {
-    const speed = Math.hypot(this.vx, this.vy);
-    const motion = Math.min(speed / 14, 1);
+  reset() {
+    this.x = canvas.width / 2;
+    this.y = canvas.height - 80;
+    this.vx = 0;
+    this.vy = 0;
+    this.rotation = 0;
+    this.moving = false;
+    this.respawning = false;
+  },
 
-    /* shadow */
-    ctx.beginPath();
-    ctx.ellipse(
-      this.x,
-      this.y + 30 + motion * 10,
-      26 + motion * 8,
-      6 + motion * 3,
-      0,
-      0,
-      Math.PI * 2
-    );
-    ctx.fillStyle = `rgba(0,0,0,${0.25 - motion * 0.1})`;
-    ctx.fill();
-
-    /* rotating ball */
-    const size = this.r * 2.3;
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rotation);
-    ctx.drawImage(ballImg, -size / 2, -size / 2, size, size);
-    ctx.restore();
+  speed() {
+    return Math.hypot(this.vx, this.vy);
   },
 
   update() {
     if (!this.moving) return;
 
     this.x += this.vx;
-    this.y -= Math.abs(this.vy);
+    this.y -= Math.abs(this.vy); 
+    this.rotation += this.speed() * 0.04;
+    
+    this.vx *= 0.994;
+    this.vy *= 0.994;
 
-    const speed = Math.hypot(this.vx, this.vy);
-    this.rotation += speed * 0.04;
+    if (this.x - this.r <= 0) { this.x = this.r; this.vx = 0; }
+    if (this.x + this.r >= canvas.width) { this.x = canvas.width - this.r; this.vx = 0; }
 
-    const floorY = BASE_HEIGHT - BALL_FLOOR_OFFSET;
-    if (this.y > floorY) this.y = floorY;
-
-    this.x = Math.max(this.r, Math.min(BASE_WIDTH - this.r, this.x));
+    if (this.y - this.r <= HUD_HEIGHT && !this.respawning) {
+      this.y = HUD_HEIGHT + this.r;
+      this.vx = 0; this.vy = 0;
+      this.moving = false;
+      this.respawning = true;
+      setTimeout(() => this.reset(), 600);
+    }
   },
 
-  reset() {
-    this.x = BASE_WIDTH / 2;
-    this.y = BASE_HEIGHT - BALL_FLOOR_OFFSET;
-    this.vx = this.vy = 0;
-    this.rotation = 0;
-    this.moving = false;
+  draw() {
+    if (this.respawning) return;
+    const s = this.r * 2;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.drawImage(ballImg, -this.r, -this.r, s, s);
+    ctx.restore();
   }
 };
 
@@ -131,11 +110,11 @@ const pins = [];
 
 function createPins() {
   pins.length = 0;
-
-  const cx = BASE_WIDTH / 2;
-  const startY = 120;
-  const gapY = 50;
-  const gapX = 60;
+  roundCompleted = false;
+  const cx = canvas.width / 2;
+  const startY = 100; // Slightly higher to account for taller pins
+  const gapX = 75; 
+  const gapY = 70; // INCREASED spacing for longer pins
 
   layout.forEach((count, row) => {
     const rowWidth = (count - 1) * gapX;
@@ -143,186 +122,170 @@ function createPins() {
       pins.push({
         x: cx - rowWidth / 2 + i * gapX,
         y: startY + row * gapY,
-        hit: false,
-        rot: 0,
-        fall: 0
+        vx: 0, vy: 0, rot: 0, hit: false, life: 90
       });
     }
   });
 }
 
-/* ================= DRAW PIN ================= */
 function drawPin(p) {
-  if (p.hit && p.fall > 100) return;
-
+  if (p.hit && p.life <= 0) return;
   ctx.save();
-  ctx.translate(p.x, p.y + p.fall);
+  ctx.translate(p.x, p.y);
   ctx.rotate(p.rot);
-
-  const pinW = 70;
-  const pinH = 72;
-  const fallFactor = Math.min(p.fall / 40, 1);
-
-  ctx.beginPath();
-  ctx.ellipse(
-    0,
-    4 + fallFactor * 10,
-    14 + fallFactor * 10,
-    4 + fallFactor * 2,
-    0,
-    0,
-    Math.PI * 2
-  );
-  ctx.fillStyle = `rgba(0,0,0,${0.22 - fallFactor * 0.1})`;
-  ctx.fill();
-
-  ctx.drawImage(pinImg, -pinW / 2, -pinH, pinW, pinH);
+  // Centers the image on the collision point
+  ctx.drawImage(pinImg, -PIN_WIDTH/2, -PIN_HEIGHT/2, PIN_WIDTH, PIN_HEIGHT);
   ctx.restore();
 }
 
-/* ================= COLLISION ================= */
-function checkCollision() {
+/* ================= COLLISIONS ================= */
+function checkBallPinCollision() {
   pins.forEach(p => {
-    if (!p.hit && Math.hypot(ball.x - p.x, ball.y - p.y) < ball.r + 18) {
-      p.hit = true;
-      p.rot = (Math.random() - 0.5) * 1.6;
-      p.fall = 2;
-      score++;
-
-      if (soundEnabled) {
-        sndHit.currentTime = 0;
-        sndHit.play();
-      }
-      vibrate(30);
+    if (p.hit) return;
+    const dx = p.x - ball.x;
+    const dy = p.y - ball.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < (ball.r + PIN_RADIUS)) {
+      applyImpulse(p, dx/dist, dy/dist, ball.speed() * 0.9);
+      sndHit.play().catch(() => {});
     }
   });
 }
 
-/* ================= INPUT ================= */
-let sx = 0, sy = 0;
+function checkPinPinCollision() {
+  for (let i = 0; i < pins.length; i++) {
+    const a = pins[i];
+    if (!a.hit) continue;
+    for (let j = 0; j < pins.length; j++) {
+      const b = pins[j];
+      if (b.hit) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < PIN_RADIUS * 2) {
+        applyImpulse(b, dx/dist, dy/dist, Math.hypot(a.vx, a.vy) * 0.7);
+      }
+    }
+  }
+}
+
+function applyImpulse(p, nx, ny, strength) {
+  if (!p.hit) { score++; p.hit = true; }
+  p.vx += nx * strength;
+  p.vy += ny * strength * 0.7;
+  p.rot += nx * 0.8;
+  p.life = 90;
+}
+
+/* ================= VECTOR-LOCKED INPUT HANDLING ================= */
+let isDragging = false;
+let startX = 0;
+let startY = 0;
+let currentX = 0;
 
 function getPos(e) {
-  if (e.touches) {
-    return {
-      x: e.touches[0].clientX / scale,
-      y: e.touches[0].clientY / scale
-    };
-  }
-  return { x: e.clientX / scale, y: e.clientY / scale };
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
 }
 
-canvas.addEventListener("touchstart", e => {
+canvas.addEventListener("mousedown", handleStart);
+canvas.addEventListener("touchstart", (e) => { e.preventDefault(); handleStart(e); }, { passive: false });
+window.addEventListener("mousemove", handleMove);
+window.addEventListener("touchmove", (e) => { e.preventDefault(); handleMove(e); }, { passive: false });
+window.addEventListener("mouseup", handleEnd);
+window.addEventListener("touchend", handleEnd);
+
+function handleStart(e) {
+  if (ball.moving || ball.respawning) return;
   const p = getPos(e);
-  sx = p.x;
-  sy = p.y;
-});
+  startX = ball.x;
+  startY = ball.y;
+  currentX = p.x;
+  isDragging = true;
+}
 
-canvas.addEventListener("touchend", e => {
-  if (ball.moving) return;
-  const ex = e.changedTouches[0].clientX / scale;
-  const ey = e.changedTouches[0].clientY / scale;
-  throwBall(sx, sy, ex, ey);
-});
-
-canvas.addEventListener("mousedown", e => {
+function handleMove(e) {
+  if (!isDragging || ball.moving) return;
   const p = getPos(e);
-  sx = p.x;
-  sy = p.y;
-});
+  const dx = p.x - currentX;
+  ball.x += dx;
+  if (ball.x < ball.r) ball.x = ball.r;
+  if (ball.x > canvas.width - ball.r) ball.x = canvas.width - ball.r;
+  currentX = p.x;
+}
 
-canvas.addEventListener("mouseup", e => {
-  throwBall(sx, sy, e.clientX / scale, e.clientY / scale);
-});
+function handleEnd(e) {
+  if (!isDragging || ball.moving) return;
+  isDragging = false;
+  const p = e.changedTouches ? e.changedTouches[0] : e;
+  const totalDx = p.clientX - startX;
+  const totalDy = p.clientY - startY;
+  const distance = Math.hypot(totalDx, totalDy);
+  if (distance > 40 && totalDy < -15) {
+    executeLockedThrow(totalDx, totalDy);
+  }
+}
 
-/* ================= THROW ================= */
-function throwBall(x1, y1, x2, y2) {
-  if (ball.moving) return;
-
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy);
-  if (len < 20) return;
-
-  const speed = Math.min(len * 0.12, 18);
-  ball.vx = (dx / len) * speed;
-  ball.vy = (dy / len) * speed;
+function executeLockedThrow(dx, dy) {
+  const distance = Math.hypot(dx, dy);
+  const dirX = dx / distance;
+  const dirY = dy / distance;
+  const speed = Math.min(distance * 0.16, 20);
+  ball.vx = dirX * speed * 0.65; 
+  ball.vy = Math.abs(dirY * speed);
+  if (ball.vy < 10) ball.vy = 10;
   ball.moving = true;
   throwCount++;
-
-  if (soundEnabled) {
-    sndThrow.currentTime = 0;
-    sndThrow.play();
-  }
+  sndThrow.currentTime = 0;
+  sndThrow.play().catch(() => {});
 }
 
-/* ================= GAME LOOP ================= */
+/* ================= LOOP ================= */
 function gameLoop() {
   if (!running) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.clearRect(0, 0, BASE_WIDTH, BASE_HEIGHT);
-
-  /* HUD background */
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  ctx.fillRect(0, 0, BASE_WIDTH, 42);
-
-  /* HUD text */
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.fillRect(0, 0, canvas.width, HUD_HEIGHT);
   ctx.fillStyle = "#fff";
-  ctx.font = "bold 15px Arial";
-  ctx.textBaseline = "top";
-
-  ctx.textAlign = "left";
-  ctx.fillText(`Round ${round}`, 10, 12);
-
+  ctx.font = "bold 16px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(`Score ${score}`, BASE_WIDTH / 2, 12);
-
-  ctx.textAlign = "right";
-  ctx.fillText(`Throw ${throwCount}`, BASE_WIDTH - 10, 12);
+  ctx.textBaseline = "middle";
+  const cx = canvas.width / 2;
+  ctx.fillText(`Round ${round}`, cx - 150, HUD_HEIGHT / 2);
+  ctx.fillText(`Score ${score}`, cx, HUD_HEIGHT / 2);
+  ctx.fillText(`Throw ${throwCount}`, cx + 150, HUD_HEIGHT / 2);
 
   ball.update();
-  checkCollision();
+  checkBallPinCollision();
+  checkPinPinCollision();
+
+  if (!roundCompleted && pins.every(p => p.hit)) {
+    roundCompleted = true;
+    sndStrike.play().catch(() => {});
+    setTimeout(() => {
+      round++; throwCount = 0;
+      createPins(); ball.reset();
+    }, 900);
+  }
 
   pins.forEach(p => {
     if (p.hit) {
-      p.rot += 0.05;
-      p.fall += 1.5;
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= PIN_FRICTION; p.vy *= PIN_FRICTION;
+      p.rot += p.vx * 0.015; p.life--;
     }
     drawPin(p);
   });
-
-  if (ball.moving && ball.y < -80) {
-    ball.moving = false;
-    ball.reset();
-
-    if (pins.every(p => p.hit)) {
-      if (soundEnabled) {
-        sndStrike.currentTime = 0;
-        sndStrike.play();
-      }
-      vibrate([80, 40, 80]);
-
-      setTimeout(() => {
-        round++;
-        throwCount = 0;
-        createPins();
-      }, 600);
-    }
-  }
 
   ball.draw();
   requestAnimationFrame(gameLoop);
 }
 
-/* ================= START ================= */
 playBtn.onclick = () => {
   homeScreen.style.display = "none";
   canvas.style.display = "block";
-
   running = true;
-  score = 0;
-  round = 1;
-  throwCount = 0;
-
   createPins();
   ball.reset();
   gameLoop();
