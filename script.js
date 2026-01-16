@@ -103,7 +103,6 @@ function createPins() {
   pins.length = 0;
   roundCompleted = false;
   const cx = canvas.width / 2;
-  // startY set high so pins sit near the top edge
   const startY = 80; 
   const gapX = 75; 
   const gapY = 55;
@@ -134,7 +133,6 @@ function applyImpulse(p, nx, ny, strength) {
   if (!p.hit) { 
     score++; 
     p.hit = true; 
-    // MULTIPLAYER: Update backend score
     window.parent.postMessage({ type: 'updateBattleScore', score: score }, '*');
   }
   p.vx += nx * strength;
@@ -177,7 +175,7 @@ function checkPinPinCollision() {
   }
 }
 
-/* ================= INPUT HANDLING ================= */
+/* ================= INPUT HANDLING (TOUCH ON BALL) ================= */
 let isDragging = false;
 let startX = 0, startY = 0, currentX = 0;
 
@@ -196,8 +194,15 @@ window.addEventListener("touchend", handleEnd);
 function handleStart(e) {
   if (!running || ball.moving || ball.respawning) return;
   const p = getPos(e);
-  startX = ball.x; startY = ball.y; currentX = p.x;
-  isDragging = true;
+  
+  // Hit detection: Check if touch is inside the ball radius
+  const dist = Math.hypot(p.x - ball.x, p.y - ball.y);
+  if (dist < ball.r + 20) { // 20px buffer for easier grabbing
+    startX = ball.x; 
+    startY = ball.y; 
+    currentX = p.x;
+    isDragging = true;
+  }
 }
 
 function handleMove(e) {
@@ -205,18 +210,24 @@ function handleMove(e) {
   const p = getPos(e);
   const dx = p.x - currentX;
   ball.x += dx;
+  
+  // Constrain movement within walls
   if (ball.x < ball.r) ball.x = ball.r;
   if (ball.x > canvas.width - ball.r) ball.x = canvas.width - ball.r;
+  
   currentX = p.x;
 }
 
 function handleEnd(e) {
   if (!isDragging || ball.moving) return;
   isDragging = false;
+  
   const p = e.changedTouches ? e.changedTouches[0] : e;
   const totalDx = p.clientX - startX;
   const totalDy = p.clientY - startY;
   const distance = Math.hypot(totalDx, totalDy);
+  
+  // Throw logic
   if (distance > 40 && totalDy < -15) {
     const speed = Math.min(distance * 0.16, 20);
     ball.vx = (totalDx / distance) * speed * 0.65; 
@@ -262,7 +273,6 @@ function gameLoop() {
   checkBallPinCollision();
   checkPinPinCollision();
 
-  // Endless Reset Logic
   if (!roundCompleted && pins.every(p => p.hit)) {
     roundCompleted = true;
     sndStrike.currentTime = 0; sndStrike.play().catch(() => {});
