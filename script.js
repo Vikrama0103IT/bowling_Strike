@@ -152,7 +152,7 @@ function createPins() {
   roundCompleted = false;
 
   const cx = canvas.width / 2;
-  const startY = 85;
+  const startY = 80;
   const gapX = 75;
   const gapY = 55;
 
@@ -370,3 +370,4 @@ function gameLoop() {
   ball.draw();
   requestAnimationFrame(gameLoop);
 }
+
