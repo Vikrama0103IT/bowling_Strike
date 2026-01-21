@@ -152,7 +152,7 @@ function createPins() {
   roundCompleted = false;
 
   const cx = canvas.width / 2;
-  const startY = 100;
+  const startY = 85;
   const gapX = 75;
   const gapY = 55;
 
@@ -294,14 +294,26 @@ function handleEnd(e) {
   isDragging = false;
 
   const p = e.changedTouches ? e.changedTouches[0] : e;
-  const dy = p.clientY - startY;
+
+  const dx = p.clientX - startX; // 👈 side swipe
+  const dy = p.clientY - startY; // 👈 forward swipe
 
   if (dy < -20) {
+    // forward speed
     ball.vy = Math.min(Math.abs(dy) * 0.15, 20);
+
+    // side movement based on swipe direction
+    ball.vx = Math.max(
+      -6,
+      Math.min(6, dx * 0.05)
+    );
+
     ball.moving = true;
+    sndThrow.currentTime = 0;
     sndThrow.play().catch(() => {});
   }
 }
+
 
 /* ================= GAME FLOW ================= */
 function startGame() {
