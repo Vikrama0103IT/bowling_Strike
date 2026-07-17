@@ -108,13 +108,6 @@ const ball = {
 
   draw() {
     if (this.respawning) return;
-   /*
-    ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.beginPath();
-    ctx.ellipse(this.x + 14, this.y + 20, this.r * 0.9, this.r * 0.35, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();  */
 
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -314,7 +307,6 @@ function handleEnd(e) {
   }
 }
 
-
 /* ================= GAME FLOW ================= */
 function startGame() {
   homeScreen.style.display = "none";
@@ -326,15 +318,10 @@ function startGame() {
   gameLoop();
 }
 
+// Tapping Play now starts the game directly — no parent window / postMessage needed
 playBtn.onclick = () => {
-  window.parent.postMessage({ type: "readyGame" }, "*");
+  startGame();
 };
-
-window.addEventListener("message", e => {
-  if (!e.data || !e.data.payload) return;
-  if (e.data.payload.command === "startGame") startGame();
-  if (e.data.payload.command === "endGame") running = false;
-});
 
 /* ================= LOOP ================= */
 function gameLoop() {
@@ -370,4 +357,3 @@ function gameLoop() {
   ball.draw();
   requestAnimationFrame(gameLoop);
 }
-
